@@ -377,6 +377,35 @@
         </form>
 
         <div class="stack">
+          <div class="card stack tag-address">
+            <h3>Tag address</h3>
+            <p class="tiny-note">The web address built into every tag's QR code. Scanning a tag opens this address.</p>
+            <p class="tag-address-now"><span class="field-label">New tags will open</span><strong id="tagAddressNow"></strong></p>
+            <div class="notice warn-notice">
+              <strong>Changing this only affects tags made after you save.</strong>
+              Tags that have already been made keep the address they were made with, forever. You can't update them.
+              Keep any old address working (or forwarding to the new one) for as long as those tags are in use.
+            </div>
+            <details id="tagAddressEdit" class="fold">
+              <summary>Change the tag address…</summary>
+              <form id="tagAddressForm" class="stack spaced" autocomplete="off">
+                <label>New address <input id="tagAddressNew" type="url" placeholder="https://…/" spellcheck="false" /></label>
+                <label>Type it again <input id="tagAddressConfirm" type="url" spellcheck="false" /></label>
+                <p class="tiny-note">Must start with https:// and end with /. Test it first: it should open the kids' sign-in page.</p>
+                <div class="input-row">
+                  <button id="tagAddressTest" class="btn btn-secondary btn-small" type="button">Test this address</button>
+                  <button class="btn btn-primary btn-small" type="submit">Save new address</button>
+                </div>
+                <p id="tagAddressMessage" class="message" role="status"></p>
+              </form>
+            </details>
+            <details class="fold">
+              <summary>Address history</summary>
+              <p class="tiny-note">Which address tags were made with, and from when. Tags made in each period point to that address.</p>
+              <ul id="tagAddressHistory" class="list rows"></ul>
+            </details>
+          </div>
+
           <div class="card stack">
             <h3>Bonus reasons at the Desk</h3>
             <label for="presetText" class="tiny-note">One per line. Add default minutes after a comma, e.g. “Lego club, 20”.</label>

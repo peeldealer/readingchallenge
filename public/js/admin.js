@@ -1,17 +1,79 @@
-import { supabase, rpc, el, $, formatCode, LIBRARY_NAME, SITE_URL, siteIsLocal, openedFromPasswordReset } from './lib.js';
+import { supabase, rpc, el, $, formatCode, LIBRARY_NAME, SITE_URL, isLocalAddress, openedFromPasswordReset } from './lib.js';
 import { DEFAULTS as LASER_DEFAULTS, buildSheets, layout, tagSize } from './laser.js';
 
-// Short link keeps the QR small enough to engrave cleanly: <site>/#c=CODE
-const loginUrlFor = (code) => `${SITE_URL}#c=${code}`;
+// The address built into new tags: the staff setting, or the default from
+// js/config.js. Short link keeps the QR small enough to engrave: <site>/#c=CODE
+let tagAddress = SITE_URL;
+let tagInfo = { site_url: null, history: [], active_tags: 0 };
+const loginUrlFor = (code) => `${tagAddress}#c=${code}`;
+const tagAddressIsLocal = () => isLocalAddress(tagAddress);
+const TAG_ADDRESS_RULE = /^https:\/\/[a-z0-9.-]+(:[0-9]{1,5})?(\/[a-z0-9._~%-]+)*\/$/i;
+
+async function loadTagAddress() {
+  tagInfo = await rpc('admin_site_url_info');
+  tagAddress = tagInfo.site_url ?? SITE_URL;
+  showSiteUrl();
+}
 
 function showSiteUrl() {
   const box = $('#siteUrlNote');
-  box.replaceChildren(
-    'Tags will open: ', el('strong', {}, SITE_URL),
-    siteIsLocal ? el('span', { class: 'warn' },
-      ' ⚠️ This is a local address: tags made now will only work on this computer. Set SITE_URL in js/config.js to the real web address first.') : null);
-  box.classList.toggle('notice', siteIsLocal);
+  box.replaceChildren(...[
+    el('span', {}, 'New tags will open'),
+    el('strong', { class: 'site-url-big' }, tagAddress),
+    el('span', {}, 'Tags already made keep the address they were made with. ',
+      el('button', { class: 'btn btn-secondary btn-small', type: 'button', onclick: () => showTab('settings') }, 'Change in Settings')),
+    tagAddressIsLocal() ? el('span', { class: 'warn' },
+      '⚠️ This is a local address: tags made now will only work on this computer.') : null,
+  ].filter(Boolean));
+  box.classList.toggle('notice', tagAddressIsLocal());
+  if ($('#tagAddressNow')) renderTagAddressCard();
 }
+
+function renderTagAddressCard() {
+  $('#tagAddressNow').textContent = tagAddress;
+  const history = [...tagInfo.history].reverse();
+  $('#tagAddressHistory').replaceChildren(
+    ...history.map((h, i) => el('li', { class: 'row' },
+      el('span', { class: 'name' }, h.url, el('small', { class: 'muted entry-when' }, `${i === 0 ? 'Current, since' : 'From'} ${fmtDate(h.since)}`)))),
+    el('li', { class: 'row' }, el('span', { class: 'name' }, SITE_URL,
+      el('small', { class: 'muted entry-when' }, history.length
+        ? `Default from the website code, used before ${fmtDate(tagInfo.history[0].since)}`
+        : 'Default from the website code (in use now)'))));
+}
+
+$('#tagAddressTest').addEventListener('click', () => {
+  const url = $('#tagAddressNew').value.trim() || tagAddress;
+  if (!TAG_ADDRESS_RULE.test(url)) { $('#tagAddressMessage').textContent = 'That isn’t a valid address: it must start with https:// and end with /.'; return; }
+  window.open(url, '_blank', 'noopener');
+});
+
+$('#tagAddressForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  once(e.target.querySelector('[type=submit]'), async () => {
+    const msg = $('#tagAddressMessage');
+    msg.classList.remove('ok');
+    const url = $('#tagAddressNew').value.trim();
+    if (!TAG_ADDRESS_RULE.test(url)) { msg.textContent = 'The address must start with https:// and end with /, e.g. https://library.example.nz/reading/'; return; }
+    if (url !== $('#tagAddressConfirm').value.trim()) { msg.textContent = 'The two addresses don’t match.'; return; }
+    if (url === tagAddress) { msg.textContent = 'That’s already the address.'; return; }
+    const n = tagInfo.active_tags;
+    if (!confirm(`Change the tag address?\n\nOld: ${tagAddress}\nNew: ${url}\n\n`
+      + `Only tags made AFTER this change will use the new address.\n`
+      + `${n === 1 ? 'The 1 tag already made will NOT change: it keeps' : `The ${n.toLocaleString()} tags already made will NOT change: they keep`} pointing to the old address, so keep it working or forwarding.`)) return;
+    try {
+      const r = await rpc('admin_set_site_url', { p_url: url });
+      await loadTagAddress();
+      $('#tagAddressNew').value = '';
+      $('#tagAddressConfirm').value = '';
+      $('#tagAddressEdit').open = false;
+      msg.classList.add('ok');
+      msg.textContent = r.changed
+        ? `Saved. New tags will open ${url}. ${Number(r.tags_keeping_old_address) === 1 ? 'The 1 existing tag still opens' : `The ${Number(r.tags_keeping_old_address).toLocaleString()} existing tags still open`} the old address.`
+        : 'No change.';
+      $('#tagAddressEdit').after(msg);
+    } catch (err) { fail(err); }
+  });
+});
 
 const FRIENDLY = {
   no_eligible: 'Nobody matches those rules, so no winner was drawn.',
@@ -22,6 +84,7 @@ const FRIENDLY = {
   invalid_prize: 'Type what the prize is (up to 120 characters).',
   staff_only: 'Your staff sign-in has expired. Sign in again.',
   invalid_count: 'Pick between 1 and 100 readers.',
+  invalid_site_url: 'The address must start with https:// and end with /.',
   invalid_minutes: 'Bonus must be 1–300 minutes.',
   invalid_reason: 'Type what the bonus is for (up to 80 characters).',
   not_found: 'That reader no longer exists. Refresh and try again.',
@@ -169,7 +232,7 @@ async function boot() {
   if (data.session && !data.session.user.is_anonymous && !isStaff) {
     $('#staffMessage').textContent = 'This account is not on the staff list. Ask your Supabase admin to add it.';
   }
-  if (isStaff) { showSiteUrl(); showTab('today'); }
+  if (isStaff) { await loadTagAddress().catch(fail); showTab('today'); }
   if (!isStaff && new URLSearchParams(location.search).has('timeout')) {
     $('#staffMessage').textContent = 'Signed out after 15 minutes without activity. Sign in again to carry on.';
     history.replaceState(null, '', location.pathname);
@@ -432,7 +495,7 @@ function showLaser(codes, prefs) {
   box.replaceChildren(
     el('h3', {}, `Laser files: ${codes.length} tag${codes.length === 1 ? '' : 's'}`),
     el('p', { class: 'tiny-note' },
-      `Download every sheet now: the codes can't be shown again. Tags open ${SITE_URL}. Black = engrave, red hairline = cut, units are mm. `,
+      `Download every sheet now: the codes can't be shown again. These tags open ${tagAddress}. Black = engrave, red hairline = cut, units are mm. `,
       `QR is ${result.qr.modules}×${result.qr.modules} modules, ${result.qr.moduleMM.toFixed(2)} mm each. `,
       `Test-scan the first tag before running a full batch.`),
     el('div', { class: 'input-row' }, files,
@@ -457,7 +520,7 @@ $('#createForm').addEventListener('submit', async (e) => {
 });
 
 function confirmLocal() {
-  return !siteIsLocal || confirm(`These tags will point to ${SITE_URL}, which only works on this computer. Make them anyway (for testing)?`);
+  return !tagAddressIsLocal() || confirm(`These tags will point to ${tagAddress}, which only works on this computer. Make them anyway (for testing)?`);
 }
 
 async function reissue(r) {
@@ -1202,7 +1265,7 @@ $('#newSeasonBtn').addEventListener('click', async () => {
 /* ========= Settings ========= */
 
 async function loadSettings() {
-  await loadPresets();
+  await Promise.all([loadPresets(), loadTagAddress()]);
   const s = await db(supabase.from('settings').select('*').single());
   const form = $('#settingsForm');
   for (const [k, v] of Object.entries(s)) if (form.elements[k]) form.elements[k].value = v ?? '';

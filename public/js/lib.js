@@ -75,5 +75,8 @@ export const SITE_URL = (() => {
   url.search = '';
   return url.href;
 })();
-export const siteIsLocal = /^(localhost|127\.|\[::1\]|0\.0\.0\.0)/.test(new URL(SITE_URL).hostname)
-  || new URL(SITE_URL).hostname.endsWith('.local');
+export function isLocalAddress(address) {
+  const host = new URL(address).hostname;
+  return /^(localhost|127\.|\[::1\]|0\.0\.0\.0)/.test(host) || host.endsWith('.local');
+}
+export const siteIsLocal = isLocalAddress(SITE_URL);
