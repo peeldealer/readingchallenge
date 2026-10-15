@@ -392,6 +392,8 @@
                 <label>New address <input id="tagAddressNew" type="url" placeholder="https://…/" spellcheck="false" /></label>
                 <label>Type it again <input id="tagAddressConfirm" type="url" spellcheck="false" /></label>
                 <p class="tiny-note">Must start with https:// and end with /. Test it first: it should open the kids' sign-in page.</p>
+                <p class="tiny-note">For safety, only these web hosts are allowed: <strong id="tagHosts"></strong>.
+                  Moving to a new host (say a council website) needs a developer to approve it first, so a stolen staff login can't point new tags at another site.</p>
                 <div class="input-row">
                   <button id="tagAddressTest" class="btn btn-secondary btn-small" type="button">Test this address</button>
                   <button class="btn btn-primary btn-small" type="submit">Save new address</button>

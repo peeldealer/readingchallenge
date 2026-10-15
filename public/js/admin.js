@@ -31,6 +31,7 @@ function showSiteUrl() {
 
 function renderTagAddressCard() {
   $('#tagAddressNow').textContent = tagAddress;
+  $('#tagHosts').textContent = (tagInfo.allowed_hosts ?? []).join(', ') || 'none';
   const history = [...tagInfo.history].reverse();
   $('#tagAddressHistory').replaceChildren(
     ...history.map((h, i) => el('li', { class: 'row' },
@@ -85,6 +86,8 @@ const FRIENDLY = {
   staff_only: 'Your staff sign-in has expired. Sign in again.',
   invalid_count: 'Pick between 1 and 100 readers.',
   invalid_site_url: 'The address must start with https:// and end with /.',
+  tag_host_not_allowed: 'That web host isn’t on the approved list. For safety, only a developer can add a new host (a one-line database change).',
+  reader_deleted: 'That reader deleted their account. Restore them first (Today or Readers → All tags).',
   invalid_minutes: 'Bonus must be 1–300 minutes.',
   invalid_reason: 'Type what the bonus is for (up to 80 characters).',
   not_found: 'That reader no longer exists. Refresh and try again.',
@@ -412,7 +415,7 @@ function deletedRow(r) {
 }
 
 async function restoreReader(r, refresh = loadReaders) {
-  if (!confirm(`Restore ${r.display_name ?? 'this reader'}? Their name, minutes, books and prizes come back, and their tag works again.`)) return;
+  if (!confirm(`Restore ${r.display_name ?? 'this reader'}? Their name, minutes, books and prizes come back, and their tag works again.\n\nIf someone else may have used their tag to delete it, press “New card” for them straight after restoring, so the old tag stops working.`)) return;
   try { await rpc('admin_restore_reader', { p_reader: r.reader_id }); await refresh(); } catch (err) { fail(err); }
 }
 
@@ -1308,7 +1311,7 @@ const stamp = () => new Date().toISOString().slice(0, 10);
 
 $('#exportReaders').addEventListener('click', () => once($('#exportReaders'), async () => {
   try {
-    const all = (await rpc('admin_readers', { p_search: null })).filter((r) => !r.deleted_at);
+    const all = await rpc('admin_all_readers');
     downloadCsv(`readers-${stamp()}.csv`, [['display_name', 'note', 'minutes', 'last_read_at', 'created_at'],
       ...all.map((r) => [r.display_name, r.note, r.minutes, r.last_read_at, r.created_at])]);
   } catch (err) { fail(err); }
@@ -1316,7 +1319,7 @@ $('#exportReaders').addEventListener('click', () => once($('#exportReaders'), as
 
 $('#exportLogs').addEventListener('click', () => once($('#exportLogs'), async () => {
   try {
-    const names = new Map((await rpc('admin_readers', { p_search: null })).map((r) => [r.reader_id, r]));
+    const names = new Map((await rpc('admin_all_readers')).map((r) => [r.reader_id, r]));
     const logs = [];
     // The API returns at most 1,000 rows per request, so page through.
     for (let from = 0; ; from += 1000) {
