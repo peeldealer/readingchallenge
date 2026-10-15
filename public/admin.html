@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://egvxyzdipuyixqtmeqkk.supabase.co; media-src 'self' blob: mediastream:; object-src 'none'; base-uri 'none'; form-action 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="robots" content="noindex" />
+  <title>Reading Challenge Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="vendor/supabase.js" defer></script>
+  <script src="vendor/qrcode.js" defer></script>
+</head>
+<body class="admin">
+  <header class="site-header no-print">
+    <div class="header-content">
+      <h1>Reading Challenge · Staff</h1>
+      <div class="header-actions">
+        <span id="staffEmail" class="muted"></span>
+        <button id="adminSignOut" class="btn btn-ghost hidden" type="button">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="signInView" class="login-card card no-print hidden">
+    <h2>Staff sign in</h2>
+    <form id="staffForm" class="stack">
+      <label>Email <input id="staffEmailInput" type="email" autocomplete="username" required /></label>
+      <label>Password <input id="staffPassword" type="password" autocomplete="current-password" required /></label>
+      <button class="btn btn-primary" type="submit">Sign in</button>
+      <p id="staffMessage" class="message" role="status"></p>
+      <button id="forgotPassword" class="btn btn-ghost btn-small" type="button">Forgot password?</button>
+    </form>
+    <form id="newPasswordForm" class="stack hidden">
+      <p>Choose a new password for your staff account.</p>
+      <label>New password <input id="newPassword" type="password" autocomplete="new-password" minlength="10" required /></label>
+      <button class="btn btn-primary" type="submit">Save new password</button>
+      <p id="newPasswordMessage" class="message" role="status"></p>
+    </form>
+  </main>
+
+  <main id="adminView" class="admin-main hidden">
+    <nav class="tabs no-print" role="tablist">
+      <button role="tab" data-tab="overview" class="active">Overview</button>
+      <button role="tab" data-tab="bonus">Desk</button>
+      <button role="tab" data-tab="leaderboard">Leaderboard</button>
+      <button role="tab" data-tab="readers">Readers &amp; cards</button>
+      <button role="tab" data-tab="prizes">Prizes</button>
+      <button role="tab" data-tab="books">Books</button>
+      <button role="tab" data-tab="bingo">Bingo</button>
+      <button role="tab" data-tab="news">News</button>
+      <button role="tab" data-tab="words">Blocked words</button>
+      <button role="tab" data-tab="settings">Settings</button>
+    </nav>
+
+    <section data-panel="overview" class="panel no-print">
+      <div id="overviewStats" class="stat-grid"></div>
+      <h3>Most popular books</h3>
+      <ol id="popularBooks" class="list"></ol>
+    </section>
+
+    <section data-panel="leaderboard" class="panel no-print hidden">
+      <div class="card">
+        <div class="input-row">
+          <h3 class="grow">Leaderboard</h3>
+          <label>Show
+            <select id="boardPeriod">
+              <option value="">Whole summer (what kids see)</option>
+              <option value="7">Last 7 days</option>
+              <option value="14">Last 14 days</option>
+              <option value="30">Last 30 days</option>
+            </select>
+          </label>
+        </div>
+        <p class="tiny-note">Tick readers to give them a prize or bonus minutes together, or tap a name to open them at the desk.
+          Only readers who have picked a name and have minutes appear here.</p>
+        <div class="input-row">
+          <input id="boardSearch" type="search" class="grow" placeholder="Find a name or note…" autocomplete="off" />
+          <span class="muted">Tick top</span>
+          <button class="btn btn-small" type="button" data-top="3">3</button>
+          <button class="btn btn-small" type="button" data-top="5">5</button>
+          <button class="btn btn-small" type="button" data-top="10">10</button>
+          <button id="boardClear" class="btn btn-small" type="button">Clear</button>
+        </div>
+        <div class="table-wrap spaced">
+          <table id="boardTable">
+            <thead><tr><th><span class="sr-only">Select</span></th><th>#</th><th>Name</th><th>Minutes</th><th>Prizes</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="boardBar" class="card board-bar hidden" aria-live="polite">
+        <p class="field-label" id="boardPicked"></p>
+        <form id="boardPrizeForm" class="input-row" autocomplete="off">
+          <label class="grow">Give them a prize <input id="boardPrize" maxlength="120" placeholder="e.g. Top reader this week" /></label>
+          <label>Collect by <input id="boardPrizeDate" type="date" /></label>
+          <button class="btn btn-sea" type="submit">Give prize</button>
+        </form>
+        <form id="boardBonusForm" class="input-row" autocomplete="off">
+          <label class="grow">Or bonus minutes for <input id="boardReason" maxlength="80" placeholder="e.g. Book review" list="presetReasons" /></label>
+          <label>Minutes <input id="boardMinutes" type="number" min="1" max="300" value="10" /></label>
+          <button class="btn btn-primary" type="submit">Add bonus</button>
+        </form>
+        <datalist id="presetReasons"></datalist>
+        <p id="boardMessage" class="message ok" role="status"></p>
+      </div>
+    </section>
+
+    <section data-panel="readers" class="panel hidden">
+      <div class="card no-print">
+        <h3>Make new cards</h3>
+        <p id="siteUrlNote" class="tiny-note"></p>
+        <form id="createForm" class="input-row">
+          <label>How many <input id="createCount" type="number" min="1" max="500" value="10" required /></label>
+          <label class="grow">Note (staff only, e.g. branch or batch) <input id="createNote" maxlength="200" /></label>
+          <label>Make
+            <select id="outputMode">
+              <option value="laser">Laser tags (SVG)</option>
+              <option value="paper">Paper cards (print)</option>
+              <option value="both">Both</option>
+            </select>
+          </label>
+          <button class="btn btn-primary" type="submit">Create</button>
+        </form>
+        <details class="laser-settings">
+          <summary>Laser tag settings</summary>
+          <div class="input-row">
+            <label>Tag width (mm) <input id="tagWidth" type="number" min="25" max="80" step="0.5" /></label>
+            <label>Bed width (mm) <input id="bedWidth" type="number" min="50" max="2000" /></label>
+            <label>Bed height (mm) <input id="bedHeight" type="number" min="50" max="2000" /></label>
+            <label class="check"><input id="showCode" type="checkbox" /> Typed code under QR</label>
+          </div>
+          <p class="tiny-note" id="laserFit"></p>
+        </details>
+        <p class="tiny-note">Codes are shown only once, right after you create them. Save the laser files / print straight away.
+          A lost card can be replaced with “New card” below.</p>
+      </div>
+
+      <div id="laserOutput" class="card no-print hidden"></div>
+
+      <div class="card no-print">
+        <div class="input-row">
+          <input id="readerSearch" class="grow" placeholder="Search name or note…" />
+          <button id="exportCsv" class="btn btn-secondary" type="button">Export CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table id="readersTable">
+            <thead><tr><th>Name</th><th>Note</th><th>Minutes</th><th>Last read</th><th>Created</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="readerLogs" class="card no-print hidden"></div>
+
+      <div id="printSheet" class="print-sheet"></div>
+    </section>
+
+    <section data-panel="bonus" class="panel no-print hidden">
+      <div class="grid grid-even">
+        <div class="card stack">
+          <h3>Scan a tag</h3>
+          <p class="tiny-note">Scan with a barcode scanner, type the code from the tag, or use this device's camera.
+            You'll see who it is, any prizes they've won, and can give bonus minutes or a prize.</p>
+          <form id="scanForm" class="input-row" autocomplete="off">
+            <label class="sr-only" for="scanInput">Tag code</label>
+            <input id="scanInput" class="grow code-input" placeholder="Scan or type a tag code" spellcheck="false" />
+            <button class="btn btn-sea" type="submit">Find</button>
+          </form>
+          <div class="input-row">
+            <button id="cameraBtn" class="btn btn-secondary" type="button">📷 Use camera</button>
+            <label class="check"><input id="instantMode" type="checkbox" /> Add instantly after each scan</label>
+          </div>
+          <video id="scanVideo" class="scan-video hidden" playsinline muted></video>
+          <p id="scanMessage" class="message" role="status" aria-live="polite"></p>
+          <div class="find-name">
+            <label class="field-label" for="nameSearch">No tag with them? Find them by name</label>
+            <input id="nameSearch" type="search" placeholder="Type a display name or note…" autocomplete="off" spellcheck="false" />
+            <ul id="nameResults" class="list name-results"></ul>
+          </div>
+        </div>
+
+        <div class="card stack">
+          <h3 id="awardWho">No tag scanned yet</h3>
+          <p id="awardInfo" class="muted">Scan a tag, or find someone by name, to give bonus minutes or a prize.</p>
+          <p id="awardMessage" class="message ok" role="status" aria-live="polite"></p>
+          <div id="prizePanel" class="prize-panel hidden">
+            <p class="field-label">Prizes</p>
+            <ul id="readerPrizes" class="list"></ul>
+            <form id="givePrizeForm" class="input-row spaced" autocomplete="off">
+              <label class="grow">Give a prize <input id="givePrizeInput" maxlength="120" placeholder="e.g. Book voucher" /></label>
+              <label>Collect by <input id="givePrizeDate" type="date" /></label>
+              <button class="btn btn-sea" type="submit">Give prize</button>
+            </form>
+            <p id="prizeMessage" class="message ok" role="status" aria-live="polite"></p>
+          </div>
+          <form id="awardForm" class="stack">
+            <div>
+              <p class="field-label">What's it for? Tap one, or type your own</p>
+              <div class="chips" id="reasonChips"></div>
+              <label class="sr-only" for="reasonInput">Reason</label>
+              <input id="reasonInput" maxlength="80" placeholder="e.g. Lego club, Story time, Book review" class="spaced" />
+            </div>
+            <div>
+              <p class="field-label">Bonus minutes</p>
+              <div class="chips" id="bonusChips"></div>
+              <label class="sr-only" for="bonusInput">Minutes</label>
+              <input id="bonusInput" type="number" min="1" max="300" placeholder="Or type minutes" class="spaced" />
+            </div>
+            <button id="awardBtn" class="btn btn-primary" type="submit" disabled>Add bonus</button>
+          </form>
+          <details class="laser-settings">
+            <summary>Edit the preset reasons</summary>
+            <label for="presetText" class="tiny-note">One per line. Add default minutes after a comma, e.g. “Lego club, 20”.</label>
+            <textarea id="presetText" rows="6" spellcheck="true"></textarea>
+            <div class="input-row spaced">
+              <button id="savePresets" class="btn btn-secondary" type="button">Save presets</button>
+              <span id="presetMessage" class="message ok" role="status"></span>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Recent bonus awards</h3>
+        <ul id="bonusList" class="list"></ul>
+      </div>
+    </section>
+
+    <section data-panel="prizes" class="panel no-print hidden">
+      <div class="card">
+        <div class="input-row"><h3 class="grow">Waiting to be collected</h3><span id="openCount" class="pill"></span></div>
+        <p class="tiny-note">Every prize still to hand out, overdue first. When a kid comes to the desk, scan their tag in
+          <strong>Desk</strong> to see what they've won.</p>
+        <label class="sr-only" for="prizeFilter">Filter</label>
+        <input id="prizeFilter" placeholder="Filter by name, note or prize…" />
+        <ul id="openPrizes" class="list spaced"></ul>
+      </div>
+
+      <form id="drawForm" class="card stack" autocomplete="off">
+        <h3>Run a prize draw</h3>
+        <p class="tiny-note">Picks winners at random from readers who have chosen a name and logged reading.
+          Winners see a “You won” message on their page and bring their tag to the desk to collect.</p>
+        <div class="input-row">
+          <label class="grow">Prize <input name="prize" maxlength="120" placeholder="e.g. $20 book voucher" required /></label>
+          <label>Winners <input name="count" type="number" min="1" max="100" value="1" required /></label>
+          <label>Collect by <input name="collectBy" type="date" /></label>
+        </div>
+        <div class="input-row">
+          <label>Minimum minutes <input name="min" type="number" min="0" value="0" /></label>
+          <label>Read in the last … days <input name="days" type="number" min="1" placeholder="any time" /></label>
+        </div>
+        <label class="check"><input name="weighted" type="checkbox" /> More minutes = more chances</label>
+        <label class="check"><input name="exclude" type="checkbox" checked /> Skip readers who already won a draw</label>
+        <div class="input-row">
+          <button class="btn btn-primary" type="submit">Draw winners</button>
+          <span id="drawPreview" class="pill"></span>
+        </div>
+        <p id="drawMessage" class="message" role="status" aria-live="polite"></p>
+      </form>
+
+      <div class="card">
+        <h3>Give a prize to one reader</h3>
+        <p class="tiny-note">Scan their tag at the <strong>Desk</strong>, or use <strong>Open at desk</strong>
+          on their row in <strong>Readers &amp; cards</strong>. Their prizes, bonus minutes and a “Give a prize” box are all there.</p>
+        <div><button id="goScan" class="btn btn-secondary" type="button">Go to the Desk</button></div>
+      </div>
+
+      <details class="card">
+        <summary><strong>History</strong>: every draw and prize, including cancelled ones</summary>
+        <div id="drawList" class="stack spaced"></div>
+      </details>
+    </section>
+
+    <section data-panel="books" class="panel no-print hidden">
+      <div class="card">
+        <h3>Books</h3>
+        <p class="tiny-note">Every book title kids have logged. Hide a title to remove it from book suggestions
+          and Community favourites (for rude or joke titles).</p>
+        <input id="bookSearch" placeholder="Search titles…" />
+        <div class="table-wrap">
+          <table id="booksTable">
+            <thead><tr><th>Title</th><th>Readers</th><th>Rating</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section data-panel="bingo" class="panel no-print hidden">
+      <p class="tiny-note">Leave te reo fields empty to show English. Changing a bonus only affects squares ticked from now on.</p>
+      <div class="table-wrap">
+        <table id="bingoTable">
+          <thead><tr><th>#</th><th>Icon</th><th>Title (EN)</th><th>Description (EN)</th><th>Title (MI)</th><th>Description (MI)</th><th>Bonus</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section data-panel="news" class="panel no-print hidden">
+      <form id="newsForm" class="card stack">
+        <h3>New announcement</h3>
+        <label>Title (EN) <input name="title_en" maxlength="120" required /></label>
+        <label>Body (EN) <textarea name="body_en" maxlength="2000" rows="4" required></textarea></label>
+        <label>Title (MI, optional) <input name="title_mi" maxlength="120" /></label>
+        <label>Body (MI, optional) <textarea name="body_mi" maxlength="2000" rows="4"></textarea></label>
+        <label class="check"><input type="checkbox" name="published" checked /> Publish now</label>
+        <button class="btn btn-primary" type="submit">Save</button>
+      </form>
+      <ul id="newsList" class="list"></ul>
+    </section>
+
+    <section data-panel="words" class="panel no-print hidden">
+      <form id="wordForm" class="card input-row">
+        <label class="grow">Block a word in names and book titles
+          <input id="wordInput" pattern="[A-Za-zĀĒĪŌŪāēīōū0-9]{2,40}" required /></label>
+        <button class="btn btn-primary" type="submit">Add</button>
+      </form>
+      <p class="tiny-note">Names are blocked if the word appears anywhere in them. Book titles are blocked if a word starts with it (so “fucking” is caught), and short words only as a whole word, so “Sussex” is fine. Look-alikes such as <code>sh1t</code>, <code>f.u.c.k</code> and macron tricks are caught too. Names also can’t contain library, Kāpiti, council, staff or admin.</p>
+      <ul id="wordList" class="word-chips"></ul>
+    </section>
+
+    <section data-panel="settings" class="panel no-print hidden">
+      <form id="settingsForm" class="card stack">
+        <label>Community goal (minutes) <input name="community_goal" type="number" min="1" required /></label>
+        <label>Challenge starts (NZ date, blank = open now) <input name="starts_on" type="date" /></label>
+        <label>Challenge ends (NZ date, blank = no end) <input name="ends_on" type="date" /></label>
+        <label>Max minutes per session <input name="max_session_minutes" type="number" min="1" max="600" required /></label>
+        <label>Max minutes per reader per day <input name="max_daily_minutes" type="number" min="1" max="1440" required /></label>
+        <label>Bingo bonus for each finished row, column or diagonal (minutes) <input name="bingo_line_bonus" type="number" min="0" max="300" required /></label>
+        <label>Bingo bonus for a full card (minutes) <input name="bingo_card_bonus" type="number" min="0" max="1000" required /></label>
+        <p class="tiny-note">Bingo bonuses are on top of each square's own bonus. Changes apply to lines finished from now on.</p>
+        <button class="btn btn-primary" type="submit">Save settings</button>
+        <p id="settingsMessage" class="message ok" role="status"></p>
+      </form>
+          <div class="card stack">
+        <h3>Start a new season</h3>
+        <p class="tiny-note">Clears all reading, bingo, bookshelves, ratings, bonus minutes and prize draws, and sets everyone back to 0.
+          Keeps tags (kids can reuse them), display names, hidden titles, the bingo board, news and settings.
+          <strong>Export the CSV from Readers &amp; cards first</strong> if you need this season's numbers.</p>
+        <div><button id="newSeasonBtn" class="btn btn-small danger" type="button">Start a new season…</button></div>
+        <p id="seasonMessage" class="message" role="status"></p>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="js/admin.js"></script>
+</body>
+</html>

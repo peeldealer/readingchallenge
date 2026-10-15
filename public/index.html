@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://egvxyzdipuyixqtmeqkk.supabase.co; media-src 'self' blob: mediastream:; object-src 'none'; base-uri 'none'; form-action 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="theme-color" content="#a9e3f1" />
+  <title>Summer Reading Challenge</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%98%80%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="vendor/supabase.js" defer></script>
+</head>
+<body class="login-page">
+  <header class="site-header">
+    <div class="header-content">
+      <p class="wordmark">
+        <svg class="wordmark-sun" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="13" fill="#ffc23a"/><circle cx="16" cy="16" r="5" fill="#fff6d2" opacity="0.8"/></svg>
+        <span data-i18n="appTitle">Summer Reading Challenge</span>
+      </p>
+      <button id="langToggle" class="floating-lang-toggle" type="button" aria-label="Change language / Huri reo">
+        <span data-lang-opt="en">ENG</span><span class="divider">/</span><span data-lang-opt="mi">MĀO</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="coast"><div class="coast-frame" id="coast"></div></div>
+
+  <main class="login-card card">
+    <!-- A clay version of the bamboo reading tag -->
+    <svg class="tag-pic" viewBox="0 0 76 112" aria-hidden="true">
+      <defs>
+        <linearGradient id="bamboo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f1d3a3"/><stop offset="1" stop-color="#d9a866"/></linearGradient>
+      </defs>
+      <path d="M4 34 A30 30 0 0 1 34 4 H42 A30 30 0 0 1 72 34 V104 A5 5 0 0 1 67 109 H9 A5 5 0 0 1 4 104 Z" fill="url(#bamboo)"/>
+      <circle cx="38" cy="12" r="4.5" fill="#a9e3f1"/>
+      <g fill="#7a4a1d">
+        <rect x="20" y="22" width="36" height="3" rx="1.5"/><rect x="26" y="28" width="24" height="3" rx="1.5"/>
+        <rect x="18" y="40" width="12" height="12" rx="2"/><rect x="46" y="40" width="12" height="12" rx="2"/><rect x="18" y="66" width="12" height="12" rx="2"/>
+        <rect x="34" y="42" width="6" height="6"/><rect x="34" y="54" width="10" height="5"/><rect x="48" y="58" width="6" height="12"/>
+        <rect x="22" y="56" width="8" height="5"/><rect x="36" y="66" width="8" height="8"/><rect x="48" y="74" width="10" height="4"/>
+        <rect x="24" y="92" width="28" height="3" rx="1.5"/>
+      </g>
+    </svg>
+    <h1 data-i18n="loginTitle">Scan your tag to start</h1>
+    <p class="lead" data-i18n="loginHelp">Point your camera at the QR code on your reading tag, or type the code printed under it.</p>
+
+    <form id="codeForm" class="stack" autocomplete="off">
+      <label class="sr-only" for="codeInput">Tag code</label>
+      <input id="codeInput" class="code-input" inputmode="text" autocapitalize="characters"
+             spellcheck="false" maxlength="24" data-i18n-placeholder="codePlaceholder" required />
+      <button id="signInBtn" class="btn btn-primary" type="submit" data-i18n="signIn">Sign in</button>
+      <p id="loginMessage" class="message" role="status" aria-live="polite"></p>
+    </form>
+    <a class="privacy-link" href="privacy.html" data-i18n="privacyLink">Your privacy</a>
+
+    <div id="setupWarning" class="notice hidden">
+      Supabase isn’t set up yet. Edit <code>js/config.js</code> (see the README).
+    </div>
+  </main>
+
+  <script type="module" src="js/login.js"></script>
+</body>
+</html>
