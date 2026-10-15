@@ -118,6 +118,9 @@ const SEEN_KEY = 'seenPrizes';
 function seenPrizes() {
   try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY)) ?? []); } catch { return new Set(); }
 }
+// Where to collect prizes: the library's own wording if staff set it.
+const pickupText = () => dash.settings.prize_pickup || t('prizeBody');
+
 function announcePrizes() {
   const seen = seenPrizes();
   // Keyed by name too, so two kids sharing a device each get their own popup.
@@ -126,6 +129,7 @@ function announcePrizes() {
   const dialog = $('#prizeDialog');
   if (!fresh.length || dialog.open || $('#nameDialog').open) return;
   $('#prizeDialogTitle').textContent = t('prizeTitle', { prize: fresh.map((p) => p.prize).join(' + ') });
+  $('#prizeDialogBody').textContent = pickupText();
   $('#prizeDialogWhen').textContent = fresh.length === 1 ? prizeWhen(fresh[0]) : '';
   $('#prizeDialogOk').onclick = () => dialog.close();
   dialog.onclose = () => {
@@ -151,7 +155,7 @@ function renderPrizes() {
       el('div', { class: 'prize-icon', 'aria-hidden': 'true' }, '🎉'),
       el('div', {},
         el('h3', {}, t('prizeTitle', { prize: p.prize })),
-        el('p', {}, t('prizeBody'), ' ', el('strong', {}, prizeWhen(p))),
+        el('p', {}, pickupText(), ' ', el('strong', {}, prizeWhen(p))),
         el('span', { class: 'who' }, name)))));
 }
 

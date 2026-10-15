@@ -1084,9 +1084,10 @@ async function postWinners(d, winners) {
   const names = winners.map((w) => w.display_name).filter(Boolean);
   if (!confirm(`Publish a News post congratulating ${names.join(', ')}?`)) return;
   try {
+    const { prize_pickup: pickup } = await db(supabase.from('settings').select('prize_pickup').single());
     await db(supabase.from('announcements').insert({
       title_en: `🎉 ${d.prize}: winners drawn!`,
-      body_en: `Congratulations ${names.join(', ')}!\nBring your reading tag to a library desk to collect your prize${d.collect_by ? ` by ${shortDate(d.collect_by)}` : ''}.`,
+      body_en: `Congratulations ${names.join(', ')}!\n${pickup ?? 'Bring your reading tag to a library desk to collect your prize.'}${d.collect_by ? `\nCollect it by ${shortDate(d.collect_by)}.` : ''}`,
       published: true,
     }));
     alert('Posted to News.');
@@ -1256,6 +1257,7 @@ $('#settingsForm').addEventListener('submit', async (e) => {
       max_daily_minutes: Number(f.max_daily_minutes.value),
       bingo_line_bonus: Number(f.bingo_line_bonus.value),
       bingo_card_bonus: Number(f.bingo_card_bonus.value),
+      prize_pickup: f.prize_pickup.value.trim() || null,
     }).eq('id', true));
     $('#settingsMessage').textContent = 'Saved ✓';
     setTimeout(() => { $('#settingsMessage').textContent = ''; }, 2000);

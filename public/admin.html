@@ -365,6 +365,10 @@
           <label>Bingo bonus for each finished row, column or diagonal (minutes) <input name="bingo_line_bonus" type="number" min="0" max="300" required /></label>
           <label>Bingo bonus for a full card (minutes) <input name="bingo_card_bonus" type="number" min="0" max="1000" required /></label>
           <p class="tiny-note">Bingo bonuses are on top of each square's own bonus. Changes apply to lines finished from now on.</p>
+        <label>Where kids collect prizes
+          <textarea name="prize_pickup" rows="2" maxlength="200" placeholder="Bring your reading tag to a library desk to collect it."></textarea></label>
+        <p class="tiny-note">Shown on a winner's page and in the “You won” popup, and used when you post winners to News.
+          For example: “Bring your reading tag to the front desk at Paraparaumu Library to collect it.” Leave empty for the wording above.</p>
           <button class="btn btn-primary" type="submit">Save settings</button>
           <p id="settingsMessage" class="message ok" role="status"></p>
         </form>
