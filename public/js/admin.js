@@ -26,6 +26,9 @@ const FRIENDLY = {
   invalid_reason: 'Type what the bonus is for (up to 80 characters).',
   not_found: 'That reader no longer exists. Refresh and try again.',
   not_deleted: 'That account isn’t deleted, so there’s nothing to restore.',
+  tag_not_found: 'That tag isn’t active. It may have been replaced: check the code, or press “New card” for them first.',
+  tag_not_winner: 'That tag belongs to someone else, not the winner of this prize.',
+  use_tag_to_collect: 'Scan the winner’s tag at the Desk to hand a prize over.',
 };
 function fail(err) {
   console.error(err);
@@ -60,13 +63,17 @@ const PRIZE_STATUS = {
 function prizeLine(p) {
   const bits = [`Won ${shortDate(p.won_at)}`, p.direct ? 'given directly' : 'prize draw'];
   if (p.collect_by && (p.status === 'waiting' || p.status === 'overdue')) bits.push(`collect by ${shortDate(p.collect_by)}`);
-  if (p.claimed_at) bits.push(`collected ${shortDate(p.claimed_at)}`);
+  if (p.claimed_at) bits.push(`collected ${shortDate(p.claimed_at)}${p.collected_via === 'tag' ? ' (tag checked)' : p.collected_via === 'override' ? ` (no tag: ${p.collect_note})` : ''}`);
   if (p.cancelled_at) bits.push(`cancelled ${shortDate(p.cancelled_at)}`);
   return bits.join(' · ');
 }
 
-// Buttons that make sense for a prize in its current state.
-function prizeActions(p, readerId, name, refresh) {
+// Buttons that make sense for a prize in its current state. Handing a prize
+// over only happens at the Desk: with the winner's scanned tag (checked by the
+// database), or without it by giving a reason that stays in the history.
+// desk: { code } when the reader was found by scanning their tag, {} when found
+// by name; omitted everywhere else (lists show where to go instead).
+function prizeActions(p, readerId, name, refresh, desk = null) {
   const call = (fn, args, confirmText) => async () => {
     if (confirmText && !confirm(confirmText)) return;
     try { await rpc(fn, args); await refresh(); } catch (err) { fail(err); }
@@ -75,9 +82,19 @@ function prizeActions(p, readerId, name, refresh) {
   const who = name ?? 'this reader';
   switch (p.status) {
     case 'waiting':
-    case 'overdue':
+    case 'overdue': {
+      let handOver = el('span', { class: 'muted small' }, 'Hand over at the Desk');
+      if (desk?.code) {
+        handOver = el('button', { class: 'btn btn-small btn-sea', type: 'button', onclick: call('admin_collect_prize', { p_code: desk.code, p_draw: p.draw_id }) }, 'Hand over ✓');
+      } else if (desk) {
+        handOver = el('button', { class: 'btn btn-small', type: 'button', onclick: async () => {
+          const reason = prompt(`Their tag hasn't been scanned, so we can't check this is ${who}.\n\nBest: scan their tag. If they've lost it, press “New card” for them first.\n\nTo hand over anyway, type why (kept in the prize history):`);
+          if (reason === null) return;
+          try { await rpc('admin_collect_prize_override', { ...id, p_reason: reason }); await refresh(); } catch (err) { fail(err); }
+        } }, 'Hand over without tag…');
+      }
       return [
-        el('button', { class: 'btn btn-small btn-sea', type: 'button', onclick: call('admin_set_claimed', { ...id, p_claimed: true }) }, 'Mark collected'),
+        handOver,
         p.direct ? null : el('button', {
           class: 'btn btn-small', type: 'button', title: 'Cancel this winner and draw someone else with the same rules',
           onclick: async () => {
@@ -91,8 +108,9 @@ function prizeActions(p, readerId, name, refresh) {
         }, 'Redraw'),
         el('button', { class: 'btn btn-small danger', type: 'button', onclick: call('admin_cancel_prize', { ...id, p_cancel: true }, `Cancel ${who}'s “${p.prize}”? It stays in the history as cancelled.`) }, 'Cancel'),
       ];
+    }
     case 'collected':
-      return [el('button', { class: 'btn btn-small', type: 'button', onclick: call('admin_set_claimed', { ...id, p_claimed: false }) }, 'Undo collected')];
+      return [el('button', { class: 'btn btn-small', type: 'button', onclick: call('admin_set_claimed', { ...id, p_claimed: false }, `Mark ${who}'s “${p.prize}” as not collected?`) }, 'Undo collected')];
     case 'cancelled':
       return [el('button', { class: 'btn btn-small', type: 'button', onclick: call('admin_cancel_prize', { ...id, p_cancel: false }, `Restore ${who}'s “${p.prize}”?`) }, 'Restore')];
     default:
@@ -151,7 +169,7 @@ async function boot() {
   if (data.session && !data.session.user.is_anonymous && !isStaff) {
     $('#staffMessage').textContent = 'This account is not on the staff list. Ask your Supabase admin to add it.';
   }
-  if (isStaff) { showSiteUrl(); showTab('overview'); }
+  if (isStaff) { showSiteUrl(); showTab('today'); }
   if (!isStaff && new URLSearchParams(location.search).has('timeout')) {
     $('#staffMessage').textContent = 'Signed out after 15 minutes without activity. Sign in again to carry on.';
     history.replaceState(null, '', location.pathname);
@@ -204,10 +222,12 @@ $('#adminSignOut').addEventListener('click', () => signOutHere('admin.html'));
 
 /* ========= Tabs ========= */
 
-const loaders = { overview: loadOverview, bonus: loadBonuses, leaderboard: loadBoard, readers: loadReaders, prizes: loadPrizesTab, books: loadBooks, bingo: loadBingo, news: loadNews, words: loadWords, settings: loadSettings };
+const loaders = { today: loadToday, desk: loadDesk, prizes: loadPrizesTab, readers: () => showSub('readers'), content: () => showSub('content'), settings: loadSettings };
+const subLoaders = { board: loadBoard, tags: loadReaders, bingo: loadBingo, news: loadNews, books: loadBooks, words: loadWords };
+const currentSub = { readers: 'board', content: 'bingo' };
 
 function showTab(name) {
-  if (name !== 'bonus') stopCamera();
+  if (name !== 'desk') stopCamera();
   if (name !== 'readers') clearNewCodes();
   document.querySelectorAll('[data-tab]').forEach((b) => {
     b.classList.toggle('active', b.dataset.tab === name);
@@ -217,25 +237,77 @@ function showTab(name) {
   loaders[name]().catch(fail);
 }
 document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.goto)));
 
-/* ========= Overview ========= */
-
-async function loadOverview() {
-  const o = await rpc('admin_overview');
-  const stat = (label, value) => el('div', { class: 'card stat' }, el('div', { class: 'big-number' }, value), el('div', { class: 'muted' }, label));
-  $('#overviewStats').replaceChildren(...[
-    stat('Cards issued', o.readers.toLocaleString()),
-    stat('Readers signed up', o.named_readers.toLocaleString()),
-    stat('Active in last 7 days', o.active_7d.toLocaleString()),
-    stat('Community minutes', `${o.minutes.toLocaleString()} (${((o.minutes / o.goal) * 100).toFixed(1)}%)`),
-    stat('Reading sessions', o.logs.toLocaleString()),
-    stat('Different books', o.books.toLocaleString()),
-    stat('Prizes to collect', o.prizes_open.toLocaleString()),
-    o.deleted_readers ? stat('Deleted (restorable for 14 days)', o.deleted_readers.toLocaleString()) : null,
-  ].filter(Boolean));
-  $('#popularBooks').replaceChildren(...o.popular_books.map((b) =>
-    el('li', { class: 'row' }, el('span', { class: 'name' }, b.title), el('span', { class: 'value' }, `${b.readers} readers`))));
+// Sub-views inside Readers (leaderboard / all tags) and Content (bingo, news, …).
+async function showSub(panel, sub = currentSub[panel]) {
+  if (panel === 'readers' && sub !== 'tags') clearNewCodes();
+  currentSub[panel] = sub;
+  const root = document.querySelector(`[data-panel="${panel}"]`);
+  root.querySelectorAll('[data-sub]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.sub === sub)));
+  root.querySelectorAll('[data-subpanel]').forEach((p) => p.classList.toggle('hidden', p.dataset.subpanel !== sub));
+  await subLoaders[sub]();
 }
+document.querySelectorAll('[data-panel] [data-sub]').forEach((b) => b.addEventListener('click', () => {
+  showSub(b.closest('[data-panel]').dataset.panel, b.dataset.sub).catch(fail);
+}));
+
+/* ========= Today: what needs doing ========= */
+
+const ago = (d) => {
+  const mins = Math.round((Date.now() - new Date(d)) / 60000);
+  if (mins < 60) return `${Math.max(mins, 1)} min ago`;
+  if (mins < 24 * 60) return `${Math.round(mins / 60)} h ago`;
+  return fmtDate(d);
+};
+
+async function loadToday() {
+  const [o, open, recent] = await Promise.all([
+    rpc('admin_overview'),
+    rpc('admin_prizes', { p_status: 'open' }),
+    rpc('admin_recent_text', { p_days: Number($('#recentDays').value) }),
+  ]);
+  const kpi = (value, label) => el('div', { class: 'kpi' }, el('strong', {}, value), el('span', {}, label));
+  $('#todayStats').replaceChildren(
+    kpi(o.named_readers.toLocaleString(), 'readers signed up'),
+    kpi(o.active_7d.toLocaleString(), 'active this week'),
+    kpi(`${((o.minutes / o.goal) * 100).toFixed(1)}%`, `of the ${o.goal.toLocaleString()} minute goal`),
+    kpi(o.logs.toLocaleString(), 'reading sessions'));
+
+  const overdue = open.filter((p) => p.status === 'overdue').length;
+  $('#todayPrizeCount').textContent = `${open.length} waiting${overdue ? ` · ${overdue} overdue` : ''}`;
+  $('#todayPrizeCount').className = overdue ? 'pill warn-pill' : 'pill';
+  $('#todayPrizes').replaceChildren(...(open.length ? open.slice(0, 8).map((p) =>
+    el('li', { class: 'row' },
+      el('span', { class: 'name' }, el('strong', {}, p.display_name ?? '(no name yet)'), ` · ${p.prize}`,
+        el('small', { class: 'muted entry-when' }, prizeLine(p))),
+      el('span', { class: PRIZE_STATUS[p.status].cls }, PRIZE_STATUS[p.status].label)))
+    : [el('li', { class: 'empty' }, 'Nothing waiting. 🎉')]));
+
+  $('#todayNames').replaceChildren(...(recent.names.length ? recent.names.map((r) =>
+    el('li', { class: 'row' },
+      el('span', { class: 'name' }, r.display_name, r.note ? el('span', { class: 'muted' }, ` · ${r.note}`) : null,
+        el('small', { class: 'muted entry-when' }, ago(r.named_at))),
+      el('button', { class: 'btn btn-small', type: 'button', onclick: () => resetName(r, loadToday) }, 'Reset name')))
+    : [el('li', { class: 'empty' }, 'No new names.')]));
+
+  $('#todayTitles').replaceChildren(...(recent.titles.length ? recent.titles.map((b) =>
+    el('li', { class: 'row' },
+      el('span', { class: 'name' }, b.book_title, b.hidden ? el('span', {}, ' ', el('span', { class: 'pill warn-pill' }, 'Hidden')) : null,
+        el('small', { class: 'muted entry-when' }, `${ago(b.first_seen_at)} · ${b.readers} reader${b.readers === 1 ? '' : 's'}`)),
+      el('button', { class: `btn btn-small${b.hidden ? '' : ' danger'}`, type: 'button', onclick: () => {
+        if (!b.hidden && !confirm(`Hide “${b.book_title}” from suggestions and Community favourites?`)) return;
+        updateBook(b, { hidden: !b.hidden }, loadToday);
+      } }, b.hidden ? 'Unhide' : 'Hide')))
+    : [el('li', { class: 'empty' }, 'No new titles.')]));
+
+  $('#todayDeletedCard').classList.toggle('hidden', !recent.deleted.length);
+  $('#todayDeleted').replaceChildren(...recent.deleted.map((r) =>
+    el('li', { class: 'row' },
+      el('span', { class: 'name' }, r.display_name ?? '(no name)', el('small', { class: 'muted entry-when' }, `Erased for good on ${fmtDate(r.erase_on)}`)),
+      el('button', { class: 'btn btn-small', type: 'button', onclick: () => restoreReader(r, loadToday) }, 'Restore'))));
+}
+$('#recentDays').addEventListener('change', () => loadToday().catch(fail));
 
 /* ========= Readers & cards ========= */
 
@@ -276,9 +348,9 @@ function deletedRow(r) {
       el('button', { class: 'btn btn-small danger', onclick: () => removeReader(r) }, 'Erase now')));
 }
 
-async function restoreReader(r) {
+async function restoreReader(r, refresh = loadReaders) {
   if (!confirm(`Restore ${r.display_name ?? 'this reader'}? Their name, minutes, books and prizes come back, and their tag works again.`)) return;
-  try { await rpc('admin_restore_reader', { p_reader: r.reader_id }); loadReaders(); } catch (err) { fail(err); }
+  try { await rpc('admin_restore_reader', { p_reader: r.reader_id }); await refresh(); } catch (err) { fail(err); }
 }
 
 let searchTimer;
@@ -397,9 +469,9 @@ async function reissue(r) {
   } catch (err) { fail(err); }
 }
 
-async function resetName(r) {
+async function resetName(r, refresh = loadReaders) {
   if (!confirm(`Clear the name "${r.display_name}"? They'll be asked to choose a new one next time.`)) return;
-  try { await rpc('admin_reset_name', { p_reader: r.reader_id }); loadReaders(); } catch (err) { fail(err); }
+  try { await rpc('admin_reset_name', { p_reader: r.reader_id }); await refresh(); } catch (err) { fail(err); }
 }
 
 async function removeReader(r) {
@@ -451,20 +523,6 @@ function printCards(codes, name) {
     window.print();
   });
 }
-
-$('#exportCsv').addEventListener('click', () => {
-  const rows = [['display_name', 'note', 'minutes', 'last_read_at', 'created_at'],
-    ...readers.filter((r) => !r.deleted_at).map((r) => [r.display_name ?? '', r.note ?? '', r.minutes, r.last_read_at ?? '', r.created_at])];
-  // Quote every cell and neutralise formula injection for Excel.
-  const cell = (v) => `"${String(v).replace(/^([=+\-@\t\r\s])/, "'$1").replace(/"/g, '""')}"`;
-  // BOM so Excel reads macrons (ā, ō) correctly.
-  const csv = `\uFEFF${rows.map((r) => r.map(cell).join(',')).join('\r\n')}`;
-  const a = el('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), download: 'reading-challenge-readers.csv' });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-});
 
 /* ========= Bonus minutes: scan a tag, award minutes ========= */
 
@@ -538,12 +596,18 @@ $('#savePresets').addEventListener('click', async () => {
 });
 
 function showCurrent() {
-  $('#awardWho').textContent = current ? (current.display_name ?? 'Not signed up yet') : 'No tag scanned yet';
+  $('#awardWho').textContent = current ? (current.display_name ?? 'Not signed up yet') : 'Nobody selected';
   $('#awardInfo').textContent = current
     ? `${Number(current.minutes).toLocaleString()} minutes so far${current.note ? ` · ${current.note}` : ''}${current.display_name ? '' : ' · they haven’t picked a name, but bonus minutes still count'}`
-    : 'Scan a tag, or find someone by name, to give bonus minutes or a prize.';
+    : 'Scan a tag, or find someone by name, to give bonus minutes or hand over a prize.';
   $('#awardBtn').disabled = !current;
-  $('#prizePanel').classList.toggle('hidden', !current);
+  ['#prizePanel', '#awardForm', '#givePrizeBox'].forEach((id) => $(id).classList.toggle('hidden', !current));
+  // Was this person checked with their tag, or just picked from a list?
+  const badge = $('#deskBadge');
+  badge.classList.toggle('hidden', !current);
+  badge.className = current?.code ? 'pill ok' : 'pill warn-pill';
+  badge.textContent = current?.code ? '✓ Tag scanned' : 'Not checked: found by name';
+  if (!current) badge.classList.add('hidden');
 }
 
 async function loadReaderPrizes() {
@@ -554,7 +618,7 @@ async function loadReaderPrizes() {
     el('li', { class: `row${p.status === 'waiting' || p.status === 'overdue' ? ' prize-row' : ''}` },
       el('span', { class: 'name' }, p.prize, ' ', el('span', { class: PRIZE_STATUS[p.status].cls }, PRIZE_STATUS[p.status].label),
         el('small', { class: 'muted entry-when' }, prizeLine(p))),
-      el('span', { class: 'actions-inline' }, prizeActions(p, reader.reader_id, reader.display_name, loadReaderPrizes))))
+      el('span', { class: 'actions-inline' }, prizeActions(p, reader.reader_id, reader.display_name, loadReaderPrizes, { code: reader.code ?? null }))))
     : [el('li', { class: 'empty' }, 'No prizes yet.')]));
 }
 
@@ -576,10 +640,10 @@ $('#givePrizeDate').value = inTwoWeeks();
 
 // Open a reader in the scan station without scanning (from Readers & cards).
 function openReader(r) {
-  current = { reader_id: r.reader_id, display_name: r.display_name, minutes: r.total ?? r.minutes, note: r.note };
+  current = { reader_id: r.reader_id, display_name: r.display_name, minutes: r.total ?? r.minutes, note: r.note, code: null };
   $('#nameSearch').value = '';
   $('#nameResults').replaceChildren();
-  showTab('bonus');
+  showTab('desk');
   showCurrent();
   $('#scanMessage').textContent = '';
   $('#awardMessage').replaceChildren();
@@ -603,7 +667,8 @@ async function lookup(text) {
   }
   try {
     const [reader] = await rpc('admin_lookup_card', { p_code: code });
-    current = reader ?? null;
+    // Keep the scanned code so prizes can be handed over against this tag.
+    current = reader ? { ...reader, code } : null;
     showCurrent();
     $('#scanInput').value = '';
     if (!reader) {
@@ -650,6 +715,12 @@ async function undoBonus(id, minutes, who, readerId) {
 $('#scanForm').addEventListener('submit', (e) => { e.preventDefault(); lookup($('#scanInput').value); });
 $('#awardForm').addEventListener('submit', (e) => { e.preventDefault(); award(); });
 
+async function loadDesk() {
+  if (!$('#givePrizeDate').value) $('#givePrizeDate').value = inTwoWeeks();
+  showCurrent();
+  await loadBonuses();
+}
+
 async function loadBonuses() {
   await loadPresets();
   const awards = await rpc('admin_recent_bonuses');
@@ -663,7 +734,7 @@ async function loadBonuses() {
         if (confirm(`Remove ${a.minutes} bonus minutes from ${a.display_name ?? 'this reader'}?`)) undoBonus(a.id, a.minutes, a.display_name ?? 'this reader', a.reader_id);
       } }, 'Remove')))
     : [el('li', { class: 'empty' }, 'No bonus minutes given yet.')]));
-  if (!document.querySelector('[data-panel="bonus"]').classList.contains('hidden')) $('#scanInput').focus();
+  if (!document.querySelector('[data-panel="desk"]').classList.contains('hidden') && !current) $('#scanInput').focus();
 }
 
 /* ---------- find a reader by name (no tag at the desk) ---------- */
@@ -890,11 +961,12 @@ function renderOpenPrizes() {
         el('strong', {}, p.display_name ?? '(no name yet)'), p.note ? el('span', { class: 'muted' }, ` · ${p.note}`) : null,
         ' — ', p.prize, ' ', el('span', { class: PRIZE_STATUS[p.status].cls }, PRIZE_STATUS[p.status].label),
         el('small', { class: 'muted entry-when' }, prizeLine(p))),
-      el('span', { class: 'actions-inline' }, prizeActions(p, p.reader_id, p.display_name, () => loadPrizesTab()))))
+      el('span', { class: 'actions-inline' },
+        el('button', { class: 'btn btn-small', type: 'button', onclick: () => openReader(p) }, 'Open at desk'),
+        prizeActions(p, p.reader_id, p.display_name, () => loadPrizesTab()))))
     : [el('li', { class: 'empty' }, openPrizes.length ? 'Nothing matches that filter.' : 'Nothing waiting to be collected. 🎉')]));
 }
 $('#prizeFilter').addEventListener('input', renderOpenPrizes);
-$('#goScan').addEventListener('click', () => showTab('bonus'));
 
 function drawArgs() {
   const f = $('#drawForm').elements;
@@ -964,6 +1036,7 @@ async function loadDraws() {
       el('ul', { class: 'draw-winners' }, d.winners.map((w) => el('li', { class: w.status === 'cancelled' ? 'cancelled' : '' },
         el('span', { class: 'winner-name' }, w.display_name ?? '(no name yet)', w.note ? el('span', { class: 'muted' }, ` · ${w.note}`) : null),
         el('span', { class: PRIZE_STATUS[w.status].cls }, PRIZE_STATUS[w.status].label),
+        w.collected_via ? el('small', { class: 'muted' }, w.collected_via === 'tag' ? 'tag checked' : `no tag: ${w.collect_note}`) : null,
         w.status === 'cancelled' ? el('button', { class: 'btn btn-small', type: 'button', onclick: async () => {
           if (!confirm(`Restore ${w.display_name ?? 'this reader'}'s “${d.prize}”?`)) return;
           try { await rpc('admin_cancel_prize', { p_draw: d.id, p_reader: w.reader_id, p_cancel: false }); loadPrizesTab(); } catch (err) { fail(err); }
@@ -1001,8 +1074,8 @@ async function loadBooks() {
     : [el('tr', {}, el('td', { colspan: '4', class: 'muted' }, 'No books logged yet.'))]));
 }
 
-async function updateBook(b, values) {
-  try { await db(supabase.from('book_stats').update(values).eq('book_key', b.book_key)); loadBooks(); } catch (err) { fail(err); }
+async function updateBook(b, values, refresh = loadBooks) {
+  try { await db(supabase.from('book_stats').update(values).eq('book_key', b.book_key)); await refresh(); } catch (err) { fail(err); }
 }
 
 let bookSearchTimer;
@@ -1015,30 +1088,45 @@ $('#bookSearch').addEventListener('input', () => {
 
 async function loadBingo() {
   const squares = await db(supabase.from('bingo_squares').select('*').order('position'));
+  $('#bingoSave').disabled = true;
+  $('#bingoSaveMessage').textContent = '';
   $('#bingoTable tbody').replaceChildren(...squares.map((sq) => {
     const input = (field, attrs = {}) => el('input', { value: sq[field] ?? '', 'data-field': field, ...attrs });
-    const row = el('tr', {},
+    return el('tr', { 'data-position': sq.position },
       el('td', {}, sq.position + 1),
       el('td', {}, input('icon', { maxlength: '8', class: 'narrow', 'aria-label': 'Icon (emoji)' })),
       el('td', {}, input('title_en', { maxlength: '40', required: true })),
       el('td', {}, input('description_en', { maxlength: '300', required: true })),
       el('td', {}, input('title_mi', { maxlength: '40' })),
       el('td', {}, input('description_mi', { maxlength: '300' })),
-      el('td', {}, input('bonus_minutes', { type: 'number', min: '0', max: '120', class: 'narrow' })),
-      el('td', {}, el('button', { class: 'btn btn-small', onclick: async (e) => {
-        const values = {};
-        row.querySelectorAll('[data-field]').forEach((i) => { values[i.dataset.field] = i.value.trim() || null; });
-        values.bonus_minutes = Number(values.bonus_minutes ?? 0);
-        if (!values.title_en || !values.description_en) return alert('English title and description are required.');
-        try {
-          await db(supabase.from('bingo_squares').update(values).eq('position', sq.position));
-          e.target.textContent = 'Saved ✓';
-          setTimeout(() => { e.target.textContent = 'Save'; }, 1500);
-        } catch (err) { fail(err); }
-      } }, 'Save')));
-    return row;
+      el('td', {}, input('bonus_minutes', { type: 'number', min: '0', max: '120', class: 'narrow' })));
   }));
 }
+
+// Edits only mark the row; one Save writes every changed row.
+$('#bingoTable').addEventListener('input', (e) => {
+  e.target.closest('tr')?.classList.add('changed');
+  $('#bingoSave').disabled = false;
+  $('#bingoSaveMessage').textContent = '';
+});
+
+$('#bingoSave').addEventListener('click', () => once($('#bingoSave'), async () => {
+  const rows = [...document.querySelectorAll('#bingoTable tr.changed')];
+  for (const row of rows) {
+    const values = {};
+    row.querySelectorAll('[data-field]').forEach((i) => { values[i.dataset.field] = i.value.trim() || null; });
+    values.bonus_minutes = Number(values.bonus_minutes ?? 0);
+    if (!values.title_en || !values.description_en) {
+      alert(`Square ${Number(row.dataset.position) + 1}: the English title and description are required.`);
+      return;
+    }
+    try {
+      await db(supabase.from('bingo_squares').update(values).eq('position', Number(row.dataset.position)));
+      row.classList.remove('changed');
+    } catch (err) { fail(err); return; }
+  }
+  $('#bingoSaveMessage').textContent = `Saved ${rows.length} square${rows.length === 1 ? '' : 's'} ✓`;
+}).then(() => { $('#bingoSave').disabled = !document.querySelector('#bingoTable tr.changed'); }));
 
 /* ========= News ========= */
 
@@ -1114,6 +1202,7 @@ $('#newSeasonBtn').addEventListener('click', async () => {
 /* ========= Settings ========= */
 
 async function loadSettings() {
+  await loadPresets();
   const s = await db(supabase.from('settings').select('*').single());
   const form = $('#settingsForm');
   for (const [k, v] of Object.entries(s)) if (form.elements[k]) form.elements[k].value = v ?? '';
@@ -1136,6 +1225,55 @@ $('#settingsForm').addEventListener('submit', async (e) => {
     setTimeout(() => { $('#settingsMessage').textContent = ''; }, 2000);
   } catch (err) { fail(err); }
 });
+
+/* ========= Downloads (CSV) ========= */
+
+function downloadCsv(filename, rows) {
+  // Quote every cell and neutralise formula injection for Excel.
+  const cell = (v) => `"${String(v ?? '').replace(/^([=+\-@\t\r\s])/, "'$1").replace(/"/g, '""')}"`;
+  // BOM so Excel reads macrons (ā, ō) correctly.
+  const csv = `﻿${rows.map((r) => r.map(cell).join(',')).join('\r\n')}`;
+  const a = el('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), download: filename });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  $('#exportMessage').textContent = `Downloaded ${filename} (${rows.length - 1} rows).`;
+}
+
+const stamp = () => new Date().toISOString().slice(0, 10);
+
+$('#exportReaders').addEventListener('click', () => once($('#exportReaders'), async () => {
+  try {
+    const all = (await rpc('admin_readers', { p_search: null })).filter((r) => !r.deleted_at);
+    downloadCsv(`readers-${stamp()}.csv`, [['display_name', 'note', 'minutes', 'last_read_at', 'created_at'],
+      ...all.map((r) => [r.display_name, r.note, r.minutes, r.last_read_at, r.created_at])]);
+  } catch (err) { fail(err); }
+}));
+
+$('#exportLogs').addEventListener('click', () => once($('#exportLogs'), async () => {
+  try {
+    const names = new Map((await rpc('admin_readers', { p_search: null })).map((r) => [r.reader_id, r]));
+    const logs = [];
+    // The API returns at most 1,000 rows per request, so page through.
+    for (let from = 0; ; from += 1000) {
+      const page = await db(supabase.from('reading_logs').select('reader_id,minutes,book_title,source,created_at')
+        .order('created_at', { ascending: true }).range(from, from + 999));
+      logs.push(...page);
+      if (page.length < 1000) break;
+    }
+    downloadCsv(`reading-log-${stamp()}.csv`, [['logged_at', 'display_name', 'note', 'book_title', 'minutes', 'source'],
+      ...logs.map((l) => [l.created_at, names.get(l.reader_id)?.display_name, names.get(l.reader_id)?.note, l.book_title, l.minutes, l.source])]);
+  } catch (err) { fail(err); }
+}));
+
+$('#exportPrizes').addEventListener('click', () => once($('#exportPrizes'), async () => {
+  try {
+    const prizes = await rpc('admin_prizes', { p_status: null });
+    downloadCsv(`prizes-${stamp()}.csv`, [['won_at', 'prize', 'display_name', 'note', 'how', 'status', 'collect_by', 'collected_at', 'cancelled_at'],
+      ...prizes.map((p) => [p.won_at, p.prize, p.display_name, p.note, p.direct ? 'given directly' : 'draw', p.status, p.collect_by, p.claimed_at, p.cancelled_at])]);
+  } catch (err) { fail(err); }
+}));
 
 if (openedFromPasswordReset) {
   supabase.auth.getSession().then(({ data }) => (data.session ? showNewPasswordForm() : boot())).catch(fail);

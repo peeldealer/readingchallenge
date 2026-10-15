@@ -500,3 +500,72 @@ td input.narrow { min-width: 0; width: 70px; }
 .board-bar .input-row { margin: 0; }
 #readersTable tr.deleted-row td { opacity: 0.75; background: repeating-linear-gradient(135deg, transparent 0 10px, rgb(217 58 43 / 0.05) 10px 20px); }
 #readersTable tr.deleted-row td.actions { opacity: 1; }
+
+/* =====================================================================
+   Staff pages: same colours and fonts, calmer and denser. Flat surfaces
+   with hairline borders, a plain tab bar, rows instead of bubbles.
+   ===================================================================== */
+.admin { background: #f1f6f5; }
+.admin .card { border-radius: 16px; box-shadow: 0 1px 2px rgba(11, 69, 82, 0.06); border: 1px solid #dbe9e6; padding: 1.15rem 1.25rem; }
+.admin .btn { box-shadow: none; border: 1px solid #cfe0dc; min-height: 40px; padding: 0.5rem 1rem; font-size: 0.98rem; }
+.admin .btn-small { min-height: 34px; padding: 0.3rem 0.8rem; font-size: 0.88rem; }
+.admin .btn-primary, .admin .btn-sea { border-color: transparent; }
+.admin .btn-primary { box-shadow: 0 2px 0 var(--pohutukawa-deep); }
+.admin .btn-sea { box-shadow: 0 2px 0 #176e6b; }
+.admin .btn:active { box-shadow: none; transform: translateY(1px); }
+.admin .site-header .btn-ghost { border-color: rgba(255, 255, 255, 0.25); }
+.admin .chip-btn { box-shadow: none; border: 1px solid #cfe0dc; background: #fff; }
+.admin .chip-btn[aria-pressed='true'] { background: var(--lagoon-deep); border-color: var(--lagoon-deep); color: #fff; }
+.admin h3 { font-size: 1.15rem; }
+.admin .muted.small, .admin small.muted { font-size: 0.82rem; }
+
+.admin .tabs { gap: 0; flex-wrap: nowrap; overflow-x: auto; border-bottom: 2px solid #dbe9e6; margin-bottom: 1.2rem; }
+.admin .tabs button { background: none; box-shadow: none; border-radius: 0; padding: 0.7rem 1.1rem; color: var(--ink-soft); border-bottom: 3px solid transparent; margin-bottom: -2px; white-space: nowrap; }
+.admin .tabs button.active { background: none; color: var(--ink); border-bottom-color: var(--pohutukawa); box-shadow: none; }
+
+.subtabs { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.subtabs button { border: 1px solid #cfe0dc; background: #fff; border-radius: 999px; padding: 0.4rem 0.95rem; font-family: var(--font-display); font-weight: 700; cursor: pointer; color: var(--ink-soft); }
+.subtabs button[aria-selected='true'] { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+.card-head { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
+.card-head h3 { margin: 0; flex: 1; }
+.fold summary { cursor: pointer; font-weight: 700; }
+.fold[open] summary { margin-bottom: 0.6rem; }
+
+/* Flat rows with dividers, for every staff list */
+.admin .list.rows { gap: 0; }
+.admin .list.rows .row { background: transparent; border-radius: 0; border-bottom: 1px solid #e3eeeb; padding: 0.6rem 0.2rem; box-shadow: none; }
+.admin .list.rows .row:last-child { border-bottom: 0; }
+.admin .list.rows .row.prize-row { background: var(--sun-soft); border-radius: 10px; border-bottom: 0; margin: 0.15rem 0; padding-inline: 0.6rem; }
+.admin .list.rows .empty { padding: 0.4rem 0.2rem; }
+
+/* Today: headline numbers in one quiet strip */
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: #fff; border: 1px solid #dbe9e6; border-radius: 16px; }
+.kpi { padding: 0.9rem 1.1rem; display: flex; flex-direction: column; }
+.kpi + .kpi { border-left: 1px solid #e3eeeb; }
+.kpi strong { font-family: var(--font-display); font-size: 1.6rem; line-height: 1.1; }
+.kpi span { color: var(--ink-soft); font-size: 0.85rem; font-weight: 700; }
+
+/* Desk: scanner on the left, the selected reader on the right */
+.desk { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 1rem; align-items: start; }
+.desk-reader { position: sticky; top: 1rem; }
+.reader-head { display: flex; gap: 0.75rem; align-items: flex-start; }
+.reader-head h3 { font-size: 1.5rem; margin: 0; }
+.reader-head p { margin: 0.15rem 0 0; }
+.desk-bonus { display: flex; flex-direction: column; gap: 0.55rem; padding-top: 0.6rem; border-top: 1px solid #e3eeeb; }
+.desk-bonus .field-label { margin: 0.2rem 0 0; }
+.desk-bonus .narrow { width: 90px; flex: none; }
+.desk-bonus #awardBtn { align-self: flex-start; min-width: 180px; }
+
+/* Bingo editor: changed rows stand out until saved */
+#bingoTable tr.changed td { background: var(--sun-soft); }
+
+/* Tablets and narrow laptops */
+@media (max-width: 900px) {
+  .desk { grid-template-columns: 1fr; }
+  .desk-reader { position: static; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi:nth-child(3) { border-left: 0; }
+  .kpi:nth-child(n+3) { border-top: 1px solid #e3eeeb; }
+}
+.card-head select { width: auto; min-height: 36px; padding: 0.3rem 0.6rem; }
