@@ -1,4 +1,4 @@
-import { supabase, rpc, el, $, formatCode, LIBRARY_NAME, SITE_URL, isLocalAddress, openedFromPasswordReset } from './lib.js';
+import { supabase, rpc, el, $, formatCode, LIBRARY_NAME, SITE_URL, isLocalAddress } from './lib.js';
 import { DEFAULTS as LASER_DEFAULTS, buildSheets, layout, tagSize } from './laser.js';
 
 // The address built into new tags: the staff setting, or the default from
@@ -241,36 +241,6 @@ async function boot() {
     history.replaceState(null, '', location.pathname);
   }
 }
-
-// Password reset: Supabase emails a link back to this page, which signs the
-// staff member in for just long enough to choose a new password.
-$('#forgotPassword').addEventListener('click', async () => {
-  const email = $('#staffEmailInput').value.trim();
-  if (!email) { $('#staffMessage').textContent = 'Type your email above first.'; return; }
-  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-  $('#staffMessage').classList.toggle('ok', !error);
-  $('#staffMessage').textContent = error
-    ? error.message
-    : 'If that’s a staff account, a reset link is on its way. Open it on this computer.';
-});
-
-function showNewPasswordForm() {
-  $('#signInView').classList.remove('hidden');
-  $('#adminView').classList.add('hidden');
-  $('#staffForm').classList.add('hidden');
-  $('#newPasswordForm').classList.remove('hidden');
-  $('#newPassword').focus();
-}
-
-$('#newPasswordForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const { error } = await supabase.auth.updateUser({ password: $('#newPassword').value });
-  $('#newPassword').value = '';
-  if (error) { $('#newPasswordMessage').textContent = error.message; return; }
-  $('#newPasswordForm').classList.add('hidden');
-  $('#staffForm').classList.remove('hidden');
-  boot();
-});
 
 $('#staffForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -1341,8 +1311,4 @@ $('#exportPrizes').addEventListener('click', () => once($('#exportPrizes'), asyn
   } catch (err) { fail(err); }
 }));
 
-if (openedFromPasswordReset) {
-  supabase.auth.getSession().then(({ data }) => (data.session ? showNewPasswordForm() : boot())).catch(fail);
-} else {
-  boot().catch(fail);
-}
+boot().catch(fail);

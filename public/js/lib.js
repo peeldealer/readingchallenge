@@ -11,8 +11,6 @@ export const configured = !SUPABASE_URL.includes('YOUR-PROJECT');
 // separate slot that lives only as long as the browser tab, so a desk computer
 // left open can't hand a staff session to a kid, and closing the tab signs out.
 const isAdminPage = /admin\.html$/.test(location.pathname);
-// Read before the Supabase client consumes the link's #access_token…&type=recovery.
-export const openedFromPasswordReset = /type=recovery/.test(location.hash);
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: isAdminPage
     ? { persistSession: true, autoRefreshToken: true, storage: window.sessionStorage, storageKey: 'srch-staff' }
