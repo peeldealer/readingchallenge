@@ -71,7 +71,7 @@ const en = {
   myBookshelf: 'My bookshelf',
   shelfEmpty: 'Books you log show up here, and you can rate them.',
   communityFavs: 'Community favourites',
-  noRatings: 'No rated books yet.',
+  noRatings: 'A book shows up here once two or more readers have rated it. Rate the books on your shelf with the stars! ⭐',
   news: 'News',
   noNews: 'No news yet.',
   newsFlash: 'New from the library',
